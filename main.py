@@ -5,6 +5,12 @@ import tkinter.font as tkFont
 import pygetwindow as gw
 import ctypes
 import time
+import inspect
+
+try:
+    import win32com.client as win32
+except ImportError:
+    win32 = None
 
 # --- IMPORTY TWOICH NOWYCH MODUŁÓW ---
 from config_db import create_connection, SQL, cfg_get, cfg_getbool
@@ -19,6 +25,7 @@ from app_crud_edytuj_uzytkownik import EdytujUzytkownikMixin
 from app_przypisywanie import PrzypisywanieMixin
 
 
+# --- GŁÓWNA KLASA APLIKACJI ---
 class Application(
     tk.Tk,
     DialogsMixin,
@@ -53,7 +60,7 @@ class Application(
             except Exception:
                 pass
 
-        # Tworzenie interfejsu UI
+        # Tworzenie interfejsu
         self.create_widgets()
 
         self.bind('<Insert>', self.search_user_function)
@@ -69,12 +76,18 @@ class Application(
             pass
 
     def generuj_oswiadczenie_laptop(self):
-        from document_generation_v2 import generuj_oswiadczenie_laptop as _gen
-        return _gen(self, create_connection=create_connection, SQL=SQL)
+        try:
+            from document_generation_v2 import generuj_oswiadczenie_laptop as _gen
+            return _gen(self, create_connection=create_connection, SQL=SQL)
+        except ImportError:
+            messagebox.showerror("Błąd", "Brak pliku document_generation_v2.py")
 
     def generuj_protokol_odbioru(self):
-        from document_generation_v2 import generuj_protokol_odbioru as _gen
-        return _gen(self, create_connection=create_connection, SQL=SQL)
+        try:
+            from document_generation_v2 import generuj_protokol_odbioru as _gen
+            return _gen(self, create_connection=create_connection, SQL=SQL)
+        except ImportError:
+            messagebox.showerror("Błąd", "Brak pliku document_generation_v2.py")
 
     def on_minimize(self, event):
         if self.state() == 'iconic':
@@ -163,7 +176,6 @@ class Application(
         self.user_labels = {}
         self.user_values = {}
         labels = ['NR KADROWY', 'IMIE', 'NAZWISKO', 'RODZAJ ZATRUDNIENIA', 'LOKALIZACJA', 'ID_UZYTKOWNIKA']
-        bold_font = tkFont.Font(weight='normal', size=15)
         for i, label_text in enumerate(labels):
             value_label = tk.Label(self.user_info_frame, text='', anchor='w', bg='lightgray', fg='red',
                                    font='Helvetica 11 bold')
@@ -189,16 +201,20 @@ class Application(
         self.right_canvas.pack(side='left', fill='y')
         self.right_scrollbar.pack(side='right', fill='y')
 
+        # SLOWNIK BEZ NAWIASOW () NA KONCU FUNKCJI
         self.right_buttons = {
-            'UŻYTKOWNIK': [('EDYTUJ', self.edit_user_record_specific), ('WYŚLIJ MAIL', self.generate_user_email),
-                           ('PRZYPISZ LAPTOPA', self.przypisz_laptopa_w_sekcji_uzytkownik),
-                           ('PRZYPISZ MONITOR', self.przypisz_monitor_w_sekcji_uzytkownik),
-                           ('PRZYPISZ TELEFON', self.przypisz_telefon_w_sekcji_uzytkownik),
-                           ('PRZYPISZ SŁUCHAWKI', self.przypisz_sluchawki_w_sekcji_uzytkownik),
-                           ('PRZYPISZ KARTE SIM', self.przypisz_karte_sim_w_sekcji_uzytkownik()),
-                           ('PRZYPISZ ROUTER', self.przypisz_router_w_sekcji_uzytkownik),
-                           ('PRZYPISZ MYSZKE', self.przypisz_myszke_w_sekcji_uzytkownik),
-                           ('PRZYPISZ KLAWIATURE', self.przypisz_klawiature_w_sekcji_uzytkownik)],
+            'UŻYTKOWNIK': [
+                ('EDYTUJ', self.edit_user_record_specific),
+                ('WYŚLIJ MAIL', self.generate_user_email),
+                ('PRZYPISZ LAPTOPA', self.przypisz_laptopa_w_sekcji_uzytkownik),
+                ('PRZYPISZ MONITOR', self.przypisz_monitor_w_sekcji_uzytkownik),
+                ('PRZYPISZ TELEFON', self.przypisz_telefon_w_sekcji_uzytkownik),
+                ('PRZYPISZ SŁUCHAWKI', self.przypisz_sluchawki_w_sekcji_uzytkownik),
+                ('PRZYPISZ KARTE SIM', self.przypisz_karte_sim_w_sekcji_uzytkownik),
+                ('PRZYPISZ ROUTER', self.przypisz_router_w_sekcji_uzytkownik),
+                ('PRZYPISZ MYSZKE', self.przypisz_myszke_w_sekcji_uzytkownik),
+                ('PRZYPISZ KLAWIATURE', self.przypisz_klawiature_w_sekcji_uzytkownik)
+            ],
             'LAPTOPY': [('DODAJ', self.action22), ('EDYTUJ', self.action4), (' USUŃ ', self.action5),
                         ('POBIERZ DANE', self.action6)],
             'MONITORY': [('DODAJ', self.action23), ('EDYTUJ', self.action24), (' USUŃ ', self.action25),
@@ -335,10 +351,10 @@ class Application(
         try:
             conn = create_connection()
             cursor = conn.cursor()
-            cursor.execute(SQL['select_msprzet_laptopy_dea55878'], (ID_UZYTKOWNIKA,))
+            cursor.execute(SQL.get('select_msprzet_laptopy_dea55878', ''), (ID_UZYTKOWNIKA,))
             row = cursor.fetchone()
             return row is not None
-        except Exception as e:
+        except Exception:
             return False
         finally:
             try:
@@ -352,7 +368,7 @@ class Application(
         for i, (btn_text, action, *kwargs) in enumerate(self.right_buttons.get(section, [])):
             btn_options = kwargs[0] if kwargs else {}
             btn = tk.Button(self.right_scrollable_frame, text=btn_text,
-                            command=lambda action=action, sec=section: self.execute_action(action, sec), **btn_options)
+                            command=lambda act=action, sec=section: self.execute_action(act, sec), **btn_options)
             btn.pack(padx=15, pady=10, fill='x')
         if section == 'UŻYTKOWNIK':
             IMIE = self.user_values['IMIE'].cget('text')
@@ -368,32 +384,25 @@ class Application(
                 oswiadczenie_btn.pack(padx=15, pady=10, fill='x')
 
     def execute_action(self, action, section):
-        # Lista funkcji przypisujących, które zawsze potrzebują argumentu user_id
-        assign_actions = [
-            self.przypisz_laptopa_w_sekcji_uzytkownik,
-            self.przypisz_monitor_w_sekcji_uzytkownik,
-            self.przypisz_telefon_w_sekcji_uzytkownik,
-            self.przypisz_sluchawki_w_sekcji_uzytkownik,
-            self.przypisz_karte_sim_w_sekcji_uzytkownik,
-            self.przypisz_router_w_sekcji_uzytkownik,
-            self.przypisz_myszke_w_sekcji_uzytkownik,
-            self.przypisz_klawiature_w_sekcji_uzytkownik
-        ]
+        action_name = getattr(action, '__name__', '')
 
-        # 1. Funkcje, które nie przyjmują żadnych argumentów
-        if action in [self.edit_user_record_specific, self.usun_konto_uzytkownika, self.usun_telefon,
-                      self.dodaj_telefon, self.generate_user_email]:
-            action()
-        # 2. Funkcje przypisywania (pobieramy ID aktualnie wybranego użytkownika z interfejsu)
-        elif action in assign_actions:
+        # 1. Obsługa przycisków PRZYPISZ w oknie użytkownika
+        if action_name.startswith('przypisz_'):
             user_id = self.user_values['ID_UZYTKOWNIKA'].cget('text')
             if not user_id:
-                messagebox.showwarning('Uwaga', 'Najpierw wyszukaj i wybierz użytkownika!')
+                messagebox.showwarning('Uwaga', 'Najpierw wyszukaj i wybierz użytkownika z listy!')
                 return
             action(user_id)
-        # 3. Cała reszta (np. DODAJ, POBIERZ DANE) otrzymuje jako argument nazwę sekcji (np. 'LAPTOPY')
-        else:
+            return
+
+        # 2. Uniwersalna obsługa reszty (z wykorzystaniem inspect)
+        sig = inspect.signature(action)
+        params = list(sig.parameters.values())
+
+        if len(params) > 0:
             action(section)
+        else:
+            action()
 
     def save_filter_values(self, section):
         if not hasattr(self, 'filter_entries_by_section'): return
@@ -439,7 +448,7 @@ class Application(
         def select_user():
             selected_item = user_tree.selection()
             if not selected_item:
-                tk.messagebox.showinfo('Błąd', 'Nie wybrano żadnego UŻYTKOWNIKa.')
+                messagebox.showinfo('Błąd', 'Nie wybrano żadnego UŻYTKOWNIKa.')
                 return
             user_data = user_tree.item(selected_item[0])['values']
             user_data = [str(value).strip("',() ") for value in user_data]
@@ -453,7 +462,7 @@ class Application(
             try:
                 user_id = int(user_data[-1])
             except ValueError:
-                tk.messagebox.showinfo('Błąd', 'ID UŻYTKOWNIKa nie jest poprawną liczbą.')
+                messagebox.showinfo('Błąd', 'ID UŻYTKOWNIKa nie jest poprawną liczbą.')
                 return
             self.userid_ze_sprzetu(user_id)
             self.display_user_assets(user_id)
@@ -493,7 +502,7 @@ class Application(
         def select_user_w_sprzecie():
             selected_item = user_tree.selection()
             if not selected_item:
-                tk.messagebox.showinfo('Błąd', 'Nie wybrano żadnego UŻYTKOWNIKa.')
+                messagebox.showinfo('Błąd', 'Nie wybrano żadnego UŻYTKOWNIKa.')
                 return
             user_data = user_tree.item(selected_item[0])['values']
             user_data = [str(value).strip("',() ") for value in user_data]
@@ -502,7 +511,7 @@ class Application(
                 IMIE = str(user_data[1])
                 NAZWISKO = str(user_data[2])
             except ValueError:
-                tk.messagebox.showinfo('Błąd', 'ID UŻYTKOWNIKa nie jest poprawną liczbą.')
+                messagebox.showinfo('Błąd', 'ID UŻYTKOWNIKa nie jest poprawną liczbą.')
                 return
             if hasattr(self, 'ID_UZYTKOWNIKA_entry') and self.ID_UZYTKOWNIKA_entry:
                 self.ID_UZYTKOWNIKA_entry.config(state='normal')
@@ -543,15 +552,19 @@ class Application(
         query_values = [f'%{value}%' for value in search_values.values() if value]
         conn = create_connection()
         cursor = conn.cursor()
-        query = SQL['select_msprzet_konta_uzytkownikow_a27f20d4']
+        query = SQL.get('select_msprzet_konta_uzytkownikow_a27f20d4', 'SELECT * FROM msprzet_KONTA_UZYTKOWNIKOW')
         if query_conditions:
             query += ' WHERE ' + query_conditions
-        cursor.execute(query, query_values)
-        self.user_tree.delete(*self.user_tree.get_children())
-        for row in cursor:
-            clean_row = [str(value).strip("',() ") for value in row]
-            self.user_tree.insert('', tk.END, values=clean_row)
-        conn.close()
+        try:
+            cursor.execute(query, query_values)
+            self.user_tree.delete(*self.user_tree.get_children())
+            for row in cursor:
+                clean_row = [str(value).strip("',() ") for value in row]
+                self.user_tree.insert('', tk.END, values=clean_row)
+        except Exception:
+            pass
+        finally:
+            conn.close()
 
     def update_table_height(self, table, row_count):
         row_height = 25
@@ -591,34 +604,51 @@ class Application(
                               'KLAWIATURY']
         user_equipment = {section: [] for section in equipment_sections}
         column_descriptions = {}
-        queries = {
-            'LAPTOPY': 'SELECT * FROM [Korytko].[LODZCD\\JN12504].[msprzet_LAPTOPY] WHERE [ID_UZYTKOWNIKA] = ?',
-            'MONITORY': 'SELECT * FROM [Korytko].[LODZCD\\JN12504].[msprzet_MONITORY] WHERE [ID_UZYTKOWNIKA] = ?',
-            'TELEFONY': 'SELECT * FROM [Korytko].[LODZCD\\JN12504].[msprzet_TELEFONY] WHERE [ID_UZYTKOWNIKA] = ?',
-            'SŁUCHAWKI': 'SELECT * FROM [Korytko].[LODZCD\\JN12504].[msprzet_SLUCHAWKI] WHERE [ID_UZYTKOWNIKA] = ?',
-            'KARTY SIM': 'SELECT * FROM [Korytko].[LODZCD\\JN12504].[msprzet_KARTY_SIM] WHERE [ID_UZYTKOWNIKA] = ?',
-            'ROUTER': 'SELECT * FROM [Korytko].[LODZCD\\JN12504].[msprzet_ROUTER] WHERE [ID_UZYTKOWNIKA] = ?',
-            'MYSZKI': 'SELECT COUNT(*) as LICZBA FROM [Korytko].[LODZCD\\JN12504].[msprzet_MYSZKI] WHERE [ID_UZYTKOWNIKA] = ?',
-            'KLAWIATURY': 'SELECT COUNT(*) as LICZBA FROM [Korytko].[LODZCD\\JN12504].[msprzet_KLAWIATURY] WHERE [ID_UZYTKOWNIKA] = ?'
-        }
-        for section, query in queries.items():
-            cursor.execute(query, (user_id,))
-            rows = cursor.fetchall()
-            if rows:
-                cleaned_rows = [[value if value is not None else '' for value in row] for row in rows]
-                user_equipment[section] = cleaned_rows
-                column_descriptions[section] = [column[0] for column in cursor.description]
 
-        cursor.execute(SQL['select_msprzet_laptopy_69ad31bd'],
-                       (user_id, user_id, user_id, user_id, user_id, user_id, user_id, user_id))
-        total_equipment = cursor.fetchone()[0]
-        cursor.execute(SQL['select_msprzet_konta_uzytkownikow_640f037d'], user_id)
-        result = cursor.fetchone()
-        przelozony = result[0] if result else ''
+        queries = {
+            'LAPTOPY': SQL.get('select_user_equipment_laptopy', ''),
+            'MONITORY': SQL.get('select_user_equipment_monitory', ''),
+            'TELEFONY': SQL.get('select_user_equipment_telefony', ''),
+            'SŁUCHAWKI': SQL.get('select_user_equipment_sluchawki', ''),
+            'KARTY SIM': SQL.get('select_user_equipment_karty_sim', ''),
+            'ROUTER': SQL.get('select_user_equipment_router', ''),
+            'MYSZKI': SQL.get('select_user_equipment_myszki', ''),
+            'KLAWIATURY': SQL.get('select_user_equipment_klawiatury', '')
+        }
+
+        for section, query in queries.items():
+            if not query: continue
+            try:
+                cursor.execute(query, (user_id,))
+                rows = cursor.fetchall()
+                if rows:
+                    cleaned_rows = [[value if value is not None else '' for value in row] for row in rows]
+                    user_equipment[section] = cleaned_rows
+                    column_descriptions[section] = [column[0] for column in cursor.description]
+            except Exception:
+                pass
+
+        try:
+            cursor.execute(SQL.get('select_msprzet_laptopy_69ad31bd', ''),
+                           (user_id, user_id, user_id, user_id, user_id, user_id, user_id, user_id))
+            total_equipment = cursor.fetchone()[0]
+        except Exception:
+            total_equipment = 0
+
+        try:
+            cursor.execute(SQL.get('select_msprzet_konta_uzytkownikow_640f037d', ''), user_id)
+            result = cursor.fetchone()
+            przelozony = result[0] if result else ''
+        except Exception:
+            przelozony = ''
+
         conn.close()
         return (user_equipment, column_descriptions, total_equipment, przelozony)
 
     def generate_user_email(self):
+        if not win32:
+            messagebox.showerror('Błąd', 'Brak biblioteki pywin32.')
+            return
         user_data = {label: value.cget('text') for label, value in self.user_values.items()}
         user_id = user_data.get('ID_UZYTKOWNIKA')
         if not user_id:
@@ -843,9 +873,9 @@ class Application(
         self.save_filter_values(section)
         selected_items = self.tabela_monitory.selection()
         if not selected_items:
-            tk.messagebox.showinfo('Błąd', 'Nie wybrano żadnego rekordu do edycji.')
+            messagebox.showinfo('Błąd', 'Nie wybrano żadnego rekordu do edycji.')
         elif len(selected_items) > 1:
-            tk.messagebox.showinfo('Błąd', 'Wybierz tylko jeden rekord do edycji.')
+            messagebox.showinfo('Błąd', 'Wybierz tylko jeden rekord do edycji.')
         else:
             record_id = self.tabela_monitory.item(selected_items[0])['values'][-1]
             self.edit_record_window_monitory(record_id)
