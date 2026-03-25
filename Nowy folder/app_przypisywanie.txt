@@ -6,100 +6,89 @@ from config_db import create_connection, SQL
 class PrzypisywanieMixin:
 
     def display_user_assets(self, user_id):
-        conn = create_connection()
-        cursor = conn.cursor()
+        parent_frame = self.frames.get('UŻYTKOWNIK')
+        if not parent_frame:
+            return
 
-        # Czyszczenie starych danych
-        if hasattr(self, 'tabela_user_laptopy'):
-            self.tabela_user_laptopy.delete(*self.tabela_user_laptopy.get_children())
-        if hasattr(self, 'tabela_user_monitory'):
-            self.tabela_user_monitory.delete(*self.tabela_user_monitory.get_children())
-        if hasattr(self, 'tabela_user_telefony'):
-            self.tabela_user_telefony.delete(*self.tabela_user_telefony.get_children())
-        if hasattr(self, 'tabela_user_sluchawki'):
-            self.tabela_user_sluchawki.delete(*self.tabela_user_sluchawki.get_children())
-        if hasattr(self, 'tabela_user_karty_sim'):
-            self.tabela_user_karty_sim.delete(*self.tabela_user_karty_sim.get_children())
-        if hasattr(self, 'tabela_user_router'):
-            self.tabela_user_router.delete(*self.tabela_user_router.get_children())
-        if hasattr(self, 'tabela_user_myszki'):
-            self.tabela_user_myszki.delete(*self.tabela_user_myszki.get_children())
-        if hasattr(self, 'tabela_user_klawiatury'):
-            self.tabela_user_klawiatury.delete(*self.tabela_user_klawiatury.get_children())
+        # 1. Czyszczenie ramki (usuwamy stary sprzęt poprzedniego pracownika)
+        for widget in parent_frame.winfo_children():
+            widget.destroy()
 
-        # Laptopy
-        try:
-            cursor.execute(SQL['select_msprzet_laptopy_ce93a11f'], (user_id,))
-            for row in cursor.fetchall():
-                self.tabela_user_laptopy.insert('', tk.END,
-                                                values=[str(v).strip() if v is not None else '' for v in row])
-        except Exception:
-            pass
+        # 2. Tworzymy Canvas z suwakiem (żeby wszystkie tabele ze sprzętem mogły się przewijać)
+        canvas = tk.Canvas(parent_frame, bg='lightgray')
+        scrollbar = ttk.Scrollbar(parent_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg='lightgray')
 
-        # Monitory
-        try:
-            cursor.execute(SQL['select_msprzet_monitory_69723938'], (user_id,))
-            for row in cursor.fetchall():
-                self.tabela_user_monitory.insert('', tk.END,
-                                                 values=[str(v).strip() if v is not None else '' for v in row])
-        except Exception:
-            pass
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
 
-        # Telefony
-        try:
-            cursor.execute(SQL['select_msprzet_telefony_62ef32ff'], (user_id,))
-            for row in cursor.fetchall():
-                self.tabela_user_telefony.insert('', tk.END,
-                                                 values=[str(v).strip() if v is not None else '' for v in row])
-        except Exception:
-            pass
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
 
-        # Słuchawki
-        try:
-            cursor.execute(SQL['select_msprzet_sluchawki_4f429425'], (user_id,))
-            for row in cursor.fetchall():
-                self.tabela_user_sluchawki.insert('', tk.END,
-                                                  values=[str(v).strip() if v is not None else '' for v in row])
-        except Exception:
-            pass
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
 
-        # Karty SIM
-        try:
-            cursor.execute(SQL['select_msprzet_karty_sim_48f030cc'], (user_id,))
-            for row in cursor.fetchall():
-                self.tabela_user_karty_sim.insert('', tk.END,
-                                                  values=[str(v).strip() if v is not None else '' for v in row])
-        except Exception:
-            pass
+        # 3. Tworzymy ujednolicone zmienne na tabele
+        self.laptop_tree = ttk.Treeview(scrollable_frame, show='headings')
+        self.monitor_tree = ttk.Treeview(scrollable_frame, show='headings')
+        self.phone_tree = ttk.Treeview(scrollable_frame, show='headings')
+        self.sluchawki_tree = ttk.Treeview(scrollable_frame, show='headings')
+        self.karty_sim_tree = ttk.Treeview(scrollable_frame, show='headings')
+        self.router_tree = ttk.Treeview(scrollable_frame, show='headings')
+        self.myszki_tree = ttk.Treeview(scrollable_frame, show='headings')
+        self.klawiatury_tree = ttk.Treeview(scrollable_frame, show='headings')
 
-        # Routery
-        try:
-            cursor.execute(SQL['select_msprzet_router_eeda9249'], (user_id,))
-            for row in cursor.fetchall():
-                self.tabela_user_router.insert('', tk.END,
-                                               values=[str(v).strip() if v is not None else '' for v in row])
-        except Exception:
-            pass
+        # 4. Pobieranie danych z użyciem funkcji z main.py
+        user_equipment, column_descriptions, _, _ = self.get_user_equipment(user_id)
 
-        # Myszki
-        try:
-            cursor.execute(SQL['select_msprzet_myszki_a7b46c56'], (user_id,))
-            for row in cursor.fetchall():
-                self.tabela_user_myszki.insert('', tk.END,
-                                               values=[str(v).strip() if v is not None else '' for v in row])
-        except Exception:
-            pass
+        tree_mapping = {
+            'LAPTOPY': ('Laptopy', self.laptop_tree),
+            'MONITORY': ('Monitory', self.monitor_tree),
+            'TELEFONY': ('Telefony', self.phone_tree),
+            'SŁUCHAWKI': ('Słuchawki', self.sluchawki_tree),
+            'KARTY SIM': ('Karty SIM', self.karty_sim_tree),
+            'ROUTER': ('Routery', self.router_tree),
+            'MYSZKI': ('Myszki', self.myszki_tree),
+            'KLAWIATURY': ('Klawiatury', self.klawiatury_tree)
+        }
 
-        # Klawiatury
-        try:
-            cursor.execute(SQL['select_msprzet_klawiatury_28c225c2'], (user_id,))
-            for row in cursor.fetchall():
-                self.tabela_user_klawiatury.insert('', tk.END,
-                                                   values=[str(v).strip() if v is not None else '' for v in row])
-        except Exception:
-            pass
+        # 5. Budowanie tabel na ekranie i ładowanie danych
+        for section_key, (display_title, tree) in tree_mapping.items():
+            data = user_equipment.get(section_key, [])
+            columns = column_descriptions.get(section_key, [])
 
-        conn.close()
+            if not columns:
+                columns = ['ID', 'Brak danych w tej sekcji']
+                data = []
+
+            # Ustawianie kolumn
+            tree['columns'] = columns
+            for col in columns:
+                tree.heading(col, text=col)
+                # Ukrywamy techniczne kolumny, których nie musi widzieć użytkownik (np. ID w bazie)
+                if col in ['ID_UZYTKOWNIKA', 'UWAGI', 'NR SDJ', 'ID']:
+                    tree.column(col, width=0, stretch=tk.NO)
+                else:
+                    tree.column(col, width=150, anchor='center')
+
+            # Wstawianie wierszy ze sprzętem
+            for row in data:
+                tree.insert('', tk.END, values=row)
+
+            # Pakujemy nagłówek sprzętu i samą tabelę na ekran
+            tk.Label(scrollable_frame, text=display_title, font='Helvetica 10 bold', bg='lightgray').pack(anchor='w',
+                                                                                                          padx=10,
+                                                                                                          pady=(10, 0))
+
+            # Wysokość tabeli dostosowuje się do ilości sprzętu
+            row_count = len(data)
+            tree.config(height=max(1, min(row_count, 5)))
+            tree.pack(fill='x', padx=10, pady=2)
+
+            # Nasłuchiwanie kliknięć, by zaznaczać rekord
+            tree.bind('<Button-1>', self.sterowanie_jednym_kliknieciem_w_sekcji_uzytkownik)
 
     def przypisz_laptopa_w_sekcji_uzytkownik(self, user_id):
         if not user_id:
