@@ -195,7 +195,7 @@ class Application(
                            ('PRZYPISZ MONITOR', self.przypisz_monitor_w_sekcji_uzytkownik),
                            ('PRZYPISZ TELEFON', self.przypisz_telefon_w_sekcji_uzytkownik),
                            ('PRZYPISZ SŁUCHAWKI', self.przypisz_sluchawki_w_sekcji_uzytkownik),
-                           ('PRZYPISZ KARTE SIM', self.przypisz_karta_sim_w_sekcji_uzytkownik),
+                           ('PRZYPISZ KARTE SIM', self.przypisz_karte_sim_w_sekcji_uzytkownik()),
                            ('PRZYPISZ ROUTER', self.przypisz_router_w_sekcji_uzytkownik),
                            ('PRZYPISZ MYSZKE', self.przypisz_myszke_w_sekcji_uzytkownik),
                            ('PRZYPISZ KLAWIATURE', self.przypisz_klawiature_w_sekcji_uzytkownik)],
@@ -368,9 +368,30 @@ class Application(
                 oswiadczenie_btn.pack(padx=15, pady=10, fill='x')
 
     def execute_action(self, action, section):
+        # Lista funkcji przypisujących, które zawsze potrzebują argumentu user_id
+        assign_actions = [
+            self.przypisz_laptopa_w_sekcji_uzytkownik,
+            self.przypisz_monitor_w_sekcji_uzytkownik,
+            self.przypisz_telefon_w_sekcji_uzytkownik,
+            self.przypisz_sluchawki_w_sekcji_uzytkownik,
+            self.przypisz_karte_sim_w_sekcji_uzytkownik,
+            self.przypisz_router_w_sekcji_uzytkownik,
+            self.przypisz_myszke_w_sekcji_uzytkownik,
+            self.przypisz_klawiature_w_sekcji_uzytkownik
+        ]
+
+        # 1. Funkcje, które nie przyjmują żadnych argumentów
         if action in [self.edit_user_record_specific, self.usun_konto_uzytkownika, self.usun_telefon,
                       self.dodaj_telefon, self.generate_user_email]:
             action()
+        # 2. Funkcje przypisywania (pobieramy ID aktualnie wybranego użytkownika z interfejsu)
+        elif action in assign_actions:
+            user_id = self.user_values['ID_UZYTKOWNIKA'].cget('text')
+            if not user_id:
+                messagebox.showwarning('Uwaga', 'Najpierw wyszukaj i wybierz użytkownika!')
+                return
+            action(user_id)
+        # 3. Cała reszta (np. DODAJ, POBIERZ DANE) otrzymuje jako argument nazwę sekcji (np. 'LAPTOPY')
         else:
             action(section)
 
